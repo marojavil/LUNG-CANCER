@@ -1,0 +1,322 @@
+---
+title: "Stroke (flexdashboard +shiny)"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+library(flexdashboard)
+library(caret) # models, createDataPartition
+library(ConfusionTableR)
+library(DataExplorer)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(kableExtra)
+library(ModelMetrics)
+library(openxlsx)
+library(plotly)
+library(probably) # for balancing performance library(pROC)
+library(pROC) # AUC
+library(psych)
+library(purrr)  # map
+library(randomForest)
+library(reshape2)
+library(skimr) # descriptive stars
+library(stringr)
+library(tidymodels)
+library(tidyverse) # %>%
+library(univariateML)
+library(vip) # for vortable unportance
+library(xgboost)
+library(WRS2)
+library(readr)
+library(DT)
+
+lung_cancer.csv="lung_cancer.csv"
+
+data=read.csv(lung_cancer.csv)
+names (data) = c("Gender","Age","Smoking","Yellow_fingers","Anxiety", "Peer_pressure", "Chronic_disease", "Fatigue", "Allergy", "Wheezing", "Alcohol_consuming", "Coughing", "Shortness_of_breath", "Swallowing_difficulty", "Chest_pain", "LUNG_CANCER")
+
+twoTOone = function(x){
+  return(ifelse(x==2, 1, 0))
+}
+
+data[ ,3:15] = twoTOone(data[ ,3:15])
+cols=c(1,3:15)
+data[ ,cols]=lapply(data[ ,cols],as.factor)
+data=data%>%
+  mutate(Diagnosis=if_else(str_detect(LUNG_CANCER,"NO"),"Negative","Positive"))%>%
+  mutate(Diagnosis=factor(Diagnosis,levels=c("Positive","Negative"),labels=c("Positive","Negative")))%>%
+  relocate(Diagnosis,.before = LUNG_CANCER)%>%
+  select(-LUNG_CANCER)
+
+resueltados_modelos_lung_cancer.csv = "resueltados_modelos_lung_cancer.csv"
+data_res <- read.csv("resueltados_modelos_lung_cancer.csv", sep=",")
+
+```
+
+
+# Datos
+
+
+```{r}
+
+datatable(data,
+          rownames=FALSE,
+          options=list(pagelength=10,scrollX=TRUE),
+          class="white-space: nowrap")
+```
+
+
+# Variable categorica { data-navmenu="graficos"}
+
+## Inputs {.sidebar}
+
+```{r}
+#library(dplyr)
+#detach("package:plotly", unload = TRUE)
+
+data1<- data %>% dplyr::select(-Diagnosis)
+
+choices1<-names(
+  data1[sapply(data1, is.factor)]
+)
+
+selectInput("x",
+            label = "Select a variable",
+            choices = choices1,
+            selected = choices1[[1]])
+
+```
+
+
+
+## Graficos
+
+
+```{r}
+
+renderPlot(
+  
+ggplot(data,aes_string(input$x))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+  
+)
+
+```
+
+# Variable numerica {data-navmenu="graficos"}
+
+
+```{r}
+
+choices2<-names(
+  data1[sapply(data1, is.numeric)]
+)
+
+selectInput("y",
+            label = "Select a variable",
+            choices = choices2,
+            selected = choices2[[1]])
+```
+
+
+```{r}
+
+renderPlot(
+  
+ggplot(data,aes_string(input$y))+
+  geom_bar(aes(fill=Diagnosis))+
+  scale_fill_brewer(palette=10)+
+  labs(x="Diagnosis", y="Age")+
+  theme_classic()
+)
+```
+
+# Variable categorica {data-navmenu="Estadistica"}
+
+## Inputs {.sidebar}
+
+No existen dfiferencia estadisticamente significativa en gender, smoking ... (p>0.05)
+
+
+## P-valor
+
+```{r}
+
+# Inicializa una matriz vacía con dimensiones apropiadas
+m <- matrix(nrow = ncol(data), ncol = 1, 
+            dimnames = list(names(data), "p_valor"))
+
+for (i in seq_along(data)) {
+  tabla <- table(data$Diagnosis, data[[i]])
+  test <- chisq.test(tabla)
+  
+  m[names(data)[i], ] <- round(test$p.value, 4)
+}
+
+formato <- c("striped", "bordered", "hover", "responsive")
+
+m %>%
+  kable() %>%
+  kable_styling(
+    bootstrap_options = formato,
+    full_width = FALSE,
+    position = "center",
+    font_size = 12
+  )
+
+
+```
+
+
+# Variable numerica {data-navmenu="Estadistica"}
+
+## Inputs {. sideber}
+
+No existen diferencia significativas en la Edad entre los individuos con diagnostico Positivo y negativo
+
+
+```{r}
+
+# Crea la matriz con el p-valor para la variable numérica 'Age'
+p_value <- pb2gen(Age ~ Diagnosis, data = data, est = "median")$p.value
+result_df <- data.frame(Variable = "Age", p_valor = p_value)
+
+# Crea la tabla con kable_styling
+formato <- c("striped", "bordered", "hover", "responsive")
+
+kable(result_df, format = "html") %>%
+        kable_styling(
+          bootstrap_options = formato,
+          full_width = FALSE,
+          position = "center",
+          font_size = 12
+        )
+
+
+```
+
+
+# Sensibilidad {data-navmenu="Metricas"}
+
+```{r}
+
+data_res["X"]=NULL
+data_res["seed"]=NULL
+data_res["max_J_train"]=NULL
+data_res["probab"]=NULL
+
+data_res$model = as.factor(as.character(data_res$model))
+
+gsen =
+ggplot(data_res, aes(x = model, y = sensitivity, fill = model)) +
+geom_boxplot() +
+scale_fill_brewer(palette = 10) +
+theme_classic()
+ggplotly(gsen)
+
+```
+
+# Especificidad {data-navmenu="Metricas"}
+
+
+```{r}
+gspe =
+ggplot(data_res, aes(x = model, y = specificity, fill = model)) +
+geom_boxplot() +
+scale_fill_brewer(palette = 10) +
+  labs(title = "ESPECIFICIDAD", x="Modelo",y="Especifidad")+
+theme_classic()
+
+ggplotly(gspe)
+
+```
+
+# AUC {data-navmenu="Metricas"}
+
+
+```{r}
+
+gauc =
+ggplot(data_res, aes(x = model, y = data_res$AUC, fill = model)) +
+geom_boxplot() +
+scale_fill_brewer(palette = 10) +
+labs(title = "AUC", x = "Modelo", y = "AUC") +
+theme_classic()
+
+ggplotly(gauc)
+
+```
+
+# Tabla de resultados
+
+```{r}
+sensibilidad = tapply(data_res$sensitivity, data_res$model, median)
+sensibilidad = data.frame(sensibilidad)
+names(sensibilidad) = c("Sensibilidad")
+
+especificidad = tapply(data_res$specificity, data_res$model, median)
+especificidad = data.frame(especificidad)
+names(especificidad) = c("Especificidad")
+
+AUC = tapply(data_res$AUC, data_res$model, median)
+AUC = data.frame(AUC)
+names(AUC) = c("AUC")
+
+final = cbind(sensibilidad, especificidad, AUC)
+
+formato = c("striped","bordered", "hover","responsive")
+
+final %>% kable() %>% kable_styling(bootstrap_options = formato,
+                                   full_width =  F,
+                                   position = "center",
+                                   font_size = 12)
+```
+
+# Comparacion de metricas
+
+No existe diferencia estadisticamente significativa entre los 3 modelo
+
+
+```{r}
+# Inicializar la matriz de p-valores
+
+m = matrix(nrow = 3,
+           ncol = 1,
+           dimnames = list(c("sensitivity", "specificity", "AUC"), c("p-valor")))
+
+data_res$model<-as.factor(data_res$model)
+
+for (i in c("sensitivity", "specificity", "AUC")) { # Iterar sobre las métricas (sensitivity, specificity, AUC)
+  
+  f = formula(paste(i,"~ model")) # Construir la fórmula para med1way
+    med1way(f, data = data_res)  # Realizar la comparación entre modelos para la métrica actual
+    m[i, ] = c(round(test$p.value, 4)) # Almacenar el p-valor en la matriz
+}
+
+
+formato = c("striped", "bordered", "hover", "responsive") # Imprimir la tabla con p-valores
+m %>% kable() %>% kable_styling(
+  bootstrap_options = formato,
+  full_width = FALSE,
+  position = "center",
+  font_size = 12
+)
+
+```
+
+
+
+
+
+
+
+
