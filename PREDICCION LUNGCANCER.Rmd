@@ -1,0 +1,1098 @@
+---
+title: "Actividad_27"
+author: "Mauricio Rojas"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    theme: united
+    highlight: tango
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, comment = NA)
+```
+
+
+```{r}
+library(caret) # models, createDataPartition
+library(ConfusionTableR)
+library(DataExplorer)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(kableExtra)
+library(ModelMetrics)
+library(openxlsx)
+library(plotly)
+library(probably) # for balancing performance library(pROC)
+library(pROC) # AUC
+library(psych)
+library(purrr)  # map
+library(randomForest)
+library(reshape2)
+library(skimr) # descriptive stars
+library(stringr)
+library(tidymodels)
+library(tidyverse) # %>%
+library(univariateML)
+library(vip) # for vortable unportance
+library(xgboost)
+library(WRS2)
+```
+
+
+## Dotaset {.tabset)
+
+### Descripción
+
+Attribute information:
+
+
+* Gender: M(male), F(female)
+
+* Age: Age of the patient
+
+* Smoking: YES=2 , NO=1
+
+* Yellow fingers: YES=2 , NO=1
+
+* Anxiety: YES=2 , NO=1 
+
+* Peer pressure: YES-2, NO-1
+
+* Chronic Disease: YES=2 , NO=1
+
+* Fatigue: YES=2 , NO=1
+
+* Allergy: YES=2 , NO=1
+
+* Wheezing: YES=2 , NO=1
+
+* Alcohol: YES=2 , NO=1
+
+* Coughing: YES=2 , NO=1
+
+* Shortness of Breath: YES=2, NO=1
+
+* Swallowing Difficulty: YES=2, NO=1
+
+* Chest pain: YE=2, NO=1
+
+* Lung Cancer: YES, NO
+
+### Preprocesado
+```{r}
+file.choose()
+```
+
+```{r}
+lung_cancer.csv="C:\\Users\\mao\\Downloads\\lung_cancer.csv"
+```
+
+
+```{r}
+data=read.csv("lung_cancer.csv")
+```
+
+
+
+
+```{r}
+
+#data = readr::read_csv("lung_cancer.csv")
+
+data %>% head() %>% kable() %>% kable_styling()
+```
+
+
+```{r}
+names (data) = c("Gender","Age","Smoking","Yellow_fingers","Anxiety", "Peer_pressure", "Chronic_disease", "Fatigue", "Allergy", "Wheezing", "Alcohol_consuming", "Coughing", "Shortness_of_breath", "Swallowing_difficulty", "Chest_pain", "LUNG_CANCER")
+```
+
+```{r}
+twoTOone = function(x){
+  return(ifelse(x==2, 1, 0))
+}
+data[,3:15] = twoTOone(data[ ,3:15])
+```
+
+```{r}
+data=data%>%
+  mutate(Diagnosis=if_else(str_detect(LUNG_CANCER,"NO"),"Negative","Positive"))%>%
+  mutate(Diagnosis=factor(Diagnosis,levels=c("Positive","Negative"),labels=c("Positive","Negative")))%>%
+  relocate(Diagnosis,.before = LUNG_CANCER)%>%
+  select(-LUNG_CANCER)
+```
+
+```{r}
+library(DT)
+datatable(data,
+          rownames=F,
+          options=list(pagelength=10,scrollX=T),
+          class="white-space:nowrap")
+```
+
+```{r}
+dim(data)
+```
+
+```{r}
+cols=c(1,3:15)
+data[ ,cols]=lapply(data[ ,cols],as.factor)
+str(data)
+```
+
+
+```{r}
+skim(data)%>%yank("factor")
+```
+
+
+```{r}
+skim(data)%>%yank("numeric")
+```
+
+
+```{r}
+na_values=function(x){sum(is.na(x))}
+apply(data, 2, na_values)
+```
+
+## Graficos {.tabset}
+
+### Variables Categoricas
+
+
+```{r}
+p1=ggplot(data,aes(Gender))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p1)
+
+p2=ggplot(data,aes(Smoking))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p2)
+
+p3=ggplot(data,aes(Yellow_fingers))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p3)
+
+p4=ggplot(data,aes(Anxiety))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p4)
+
+p5=ggplot(data,aes(Peer_pressure))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p5)
+
+p6=ggplot(data,aes(Chronic_disease))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p6)
+
+p7=ggplot(data,aes(Fatigue))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p7)
+
+p8=ggplot(data,aes(Allergy))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p8)
+
+p9=ggplot(data,aes(Wheezing))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p9)
+
+p10=ggplot(data,aes(Alcohol_consuming))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p10)
+
+p11=ggplot(data,aes(Coughing))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p11)
+
+p12=ggplot(data,aes(Shortness_of_breath))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p12)
+
+p13=ggplot(data,aes(Swallowing_difficulty))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p13)
+
+p14=ggplot(data,aes(Chest_pain))+
+  geom_bar(aes(fill=Diagnosis), show.legend=F)+
+  facet_wrap(~Diagnosis)+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(p14)
+
+```
+
+
+### Variable numericas
+```{r}
+pB = ggplot(data,aes(Diagnosis,Age))+
+  geom_boxplot(aes(fill=Diagnosis))+
+  scale_fill_brewer(palette=10)+
+  theme_classic()
+ggplotly(pB)
+```
+
+
+```{r}
+data_r = melt(data,id.vars = "Diagnosis",measure.vars = c(2)) # 1 var num
+
+ggplot(data_r, aes(x=Diagnosis,y=value))+
+  geom_boxplot()+
+  facet_wrap(~variable,nrow = 1,ncol = 1,scales = "free") # 1 var num
+```
+
+
+## Comparaciones {.tabset}
+
+### Variable categoricas
+
+```{r}
+m=matrix(nrow = 14, # 14 var
+         ncol = 2, # 2 col
+         dimnames = list(colnames(data[,c(1,3:15)]),
+                       c("p_valor", "Coeficiente_V_de_Cramer")
+                       ))
+
+#m
+
+
+```
+
+
+
+
+```{r}
+for (i in c(1,3:15)) {
+  tabla = table(data$Diagnosis,data[[i]]
+                )
+  test = chisq.test(tabla)
+  
+  cramer = function(x) {
+    unname(sqrt(chisq.test(x)$statistic / (sum(x)*(min(dim(x)) - 1))))
+  }
+  
+  m[colnames(data)[i], ] = c(round(test$p.value,4),
+                           round(cramer(tabla),4)
+                                 )
+
+  
+}
+```
+
+
+
+
+```{r}
+m = data.frame(m)
+
+formato = c("striped","bordered","hover","responsive")
+
+ m %>% kable() %>% kable_styling(bootstrap_options =  formato,
+                                 full_width =  F,
+                                 position = "center",
+                                 font_size = 12) %>%
+  column_spec(2,background = ifelse(m$p_valor>(0.05),"pink","lightblue"))
+```
+
+
+```{r}
+library(corrplot)
+library(vcd) #assocstats
+
+
+df=data[,c(1,3:16)]
+
+#Partimos de una motriz vacia con los dimensiones apropiadas
+
+empty_m = matrix(ncol = length(df),
+               nrow = length(df),
+               dimnames = list(names(df),
+                               names(df)))
+
+#Calculamos el estadistico y vamos rellenando la matriz
+
+calculate_cramer = function(m, df){
+  for (r in seq(nrow(m))){
+    for (c in seq(ncol(m))){
+      m[[r, c]]=assocstats(table(df[[r]], df[[c]]))$cramer
+    }
+  }
+
+return(m)
+
+}
+
+cor_matrix=calculate_cramer(empty_m,df)
+
+#Ya podemos graficarlo
+
+corrplot(cor_matrix, method="circle", is.corr=F, type="upper", diag=F, cl.lim = c(0,1))
+
+remove(df)
+```
+
+
+### Variable Numericas
+
+#### No parametricas
+
+
+```{r}
+m=matrix(nrow = 1, # 1 var num que ocupa la pocision 2, por eso c(2) es age
+         ncol = 1,
+         dimnames = list(colnames(data[c(2)]),
+                       c("p-valor")))
+
+m
+```
+
+```{r}
+f = formula(paste(colnames(data)[c(2)], "~ Diagnosis"))
+```
+
+```{r}
+test = wilcox.test(f,
+                   data = data)
+```
+
+```{r}
+m[colnames(data)[c(2)], ] = c(test$p.value)
+```
+
+```{r}
+formato = c("striped","bordered","hover","responsive")
+
+ m %>% kable() %>% kable_styling(bootstrap_options =  formato,
+                                 full_width =  F,
+                                 position = "center",
+                                 font_size = 12)
+```
+
+
+
+#### Robusta
+```{r}
+m = matrix(nrow = 1,
+           ncol = 1,
+           dimnames = list(colnames(data[c(2)]),
+                         c("p_valor")))
+
+m
+
+f = formula(paste(colnames(data)[c(2)], "~ Diagnosis"))
+
+test= pb2gen(f,
+             data = data,
+             est = "median")
+
+m[colnames(data)[c(2)], ] = c(round(test$p.value,4))
+
+formato = c("striped","bordered","hover","responsive")
+
+ m %>% kable() %>% kable_styling(bootstrap_options =  formato,
+                                 full_width =  F,
+                                 position = "center",
+                                 font_size = 12)
+ m = data.frame(m)
+```
+
+
+### Variables Numericas
+```{r}
+#lung_cancer = 0
+
+lung_cancer_0 = data |> filter(Diagnosis %in% c("Negative"))
+
+names_num =colnames(select_if(lung_cancer_0,is.numeric))
+
+data_num_lung_cancer0 = lung_cancer_0 |> select(all_of(names_num))
+
+
+results_data_num_lung_cancer0 = NULL
+
+for (i in colnames(data_num_lung_cancer0)) {
+  median = median(data_num_lung_cancer0[[i]], na.rm = T)
+  iqr = IQR(data_num_lung_cancer0[[i]], na.rm = T)
+  row = data.frame("VARIABLE" = i,
+                   "MEDIAN_lung_cancer_0" = median,
+                   "IQR_lung_cancer_0" = iqr)
+  results_data_num_lung_cancer0 = rbind(results_data_num_lung_cancer0, row)
+}
+
+rownames(results_data_num_lung_cancer0) = NULL
+
+results_data_num_lung_cancer0 |> kable() |> kable_styling()
+```
+
+
+```{r}
+#lung_cancer = 1
+
+lung_cancer_1 = data |> filter(Diagnosis %in% c("Positive"))
+
+names_num =colnames(select_if(lung_cancer_1,is.numeric))
+
+data_num_lung_cancer1 = lung_cancer_1 |> select(all_of(names_num))
+
+
+results_data_num_lung_cancer1 = NULL
+
+for (i in colnames(data_num_lung_cancer1)) {
+  median = median(data_num_lung_cancer0[[i]], na.rm = T)
+  iqr = IQR(data_num_lung_cancer1[[i]], na.rm = T)
+  row = data.frame("VARIABLE" = i,
+                   "MEDIAN_lung_cancer_1" = median,
+                   "IQR_lung_cancer_1" = iqr)
+  results_data_num_lung_cancer1 = rbind(results_data_num_lung_cancer1, row)
+}
+
+rownames(results_data_num_lung_cancer1) = NULL
+
+results_data_num_lung_cancer1 |> kable() |> kable_styling()
+```
+
+
+```{r}
+descriptive_table = data.frame(
+  variable = c("age"),
+  median_lung_cancer_0 = results_data_num_lung_cancer0$MEDIAN_lung_cancer_0,
+  IQR_lung_cancer_0 = results_data_num_lung_cancer0$IQR_lung_cancer_0,
+  median_lung_cancer_1 = results_data_num_lung_cancer1$MEDIAN_lung_cancer_1,
+  IQR_lung_cancer_1 = results_data_num_lung_cancer1$IQR_lung_cancer_1,
+  p_value = m$p_valor)
+
+descriptive_table
+
+names(descriptive_table) = c("Variable", "Median", "IQR", "Median", "IQR", "p-value")
+
+descriptive_table
+
+kbl(descriptive_table,
+    caption = "Numerical Variables") %>%
+  kable_paper("striped",full_width = F) %>%
+  add_header_above(c(" " = 1, "Negative" =2, "Positive" = 2, " " = 1),
+                   italic = T,
+                   align = "c",
+                   background = "lightsalmon") %>%
+  column_spec(6, background = ifelse(m$p_valor > (0.05), "lightblue", "lightgreen"))
+```
+
+
+```{r}
+m = matrix(nrow = 14, #14 var
+           ncol = 2, #2 col
+           dimnames = list(colnames(data[c(1,3:15)]),
+                         c("p_valor", "Coeficiente_V_de_Cramer")))
+
+m
+
+for (i in c(1,3:15)) {
+  tabla = table(data$Diagnosis,data[[i]]
+                )
+  test = chisq.test(tabla)
+  
+  cramer = function(x) {
+    unname(sqrt(chisq.test(x)$statistic / (sum(x)*(min(dim(x)) - 1))))
+  }
+  
+  m[colnames(data)[i], ] = c(round(test$p.value,4),
+                           round(cramer(tabla),4)
+                                 )
+}
+ m = data.frame(m)
+```
+
+```{r}
+m = data.frame(m)
+m
+```
+111
+```{r}
+str(data)
+```
+
+
+```{r}
+library(gtsummary)
+```
+
+```{r}
+data %>%
+  tbl_summary(by = Diagnosis,
+              statistic = list(
+                Age ~ "{mean} ({sd})",
+                all_categorical() ~ "{n} / {N} ({p}%)"),
+              missing = "no") %>%
+  add_overall()%>%
+  add_n() %>%
+  add_p(pvalue_fun = ~ style_pvalue(.x, digits = 3)) %>%
+  modify_header(label = "**Varables**") %>%
+  bold_labels() %>%
+  italicize_levels() %>%
+  modify_caption("**Table 1. Smmary table of patients with Postive or Negativa diagnosis")
+```
+
+
+## Modelos  {.tabset}
+
+### Xtreme gradient boosting
+
+```{r}
+library(tidymodels)
+library(caret)
+library(ROCR)
+```
+
+
+
+```{r}
+df_results_xgb = NULL
+
+
+  set.seed(1:10)
+  train_row_numbers = createDataPartition(data$Diagnosis, p = 0.8, list = FALSE)
+  d_train = data[train_row_numbers, ]
+  d_test = data[-train_row_numbers, ]
+  transformer = recipe(formula = Diagnosis ~ .,
+                       data = d_train)%>%
+  step_dummy(all_nominal_predictors())%>%
+  step_center(all_numeric())%>%
+  step_scale(all_numeric())
+  
+  data_train = transformer %>%
+  prep(d_train) %>%
+  bake(new_data = NULL)
+  data_test = transformer %>%
+  prep(d_test) %>%
+  bake(new_data = d_test)
+  ctrl = trainControl(method = "cv",
+                      number = 10,
+                      returnResamp = "final",
+                      verboseIter = FALSE,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE,
+                      savePredictions = T,
+                      allowParallel = TRUE,
+                      sampling = "up")
+
+  xgb_grid = expand.grid(nrounds = 200,
+                         eta = c(0.01, 0.05, 0.1),
+                         max_depth = c(2, 3, 4, 5),
+                         gamma = 0,
+                         colsample_bytree = 1,
+                         min_child_weight = 1,
+                         subsample = 1)
+  set.seed(1:10)
+  xgbtree_up_fit = train(Diagnosis ~ .,
+                         data = data_train,
+                         method = "xgbTree",
+                         metric = "ROC",
+                         trControl = ctrl,
+                         tuneGrid = xgb_grid)
+  
+  probs = seq(0.1, 0.9, by = 0.1)
+  set.seed(1:10)
+  ths_xgbtree_up_fit = thresholder(xgbtree_up_fit,
+                                threshold = probs,
+                                final = TRUE,
+                                statistic = "all")
+  
+  ths_xgbtree_up_fit%>%
+  mutate(prob = probs)%>%
+  filter(J == max(J))%>%
+  pull(prob) -> thresh_prob_xgbtree_up_fit
+  ths_xgbtree_up_fit %>%
+  mutate(prob =probs) %>%
+  filter(J == max(J)) %>%
+  pull(J) -> max_J_train
+  preds = as.factor(ifelse(predict(xgbtree_up_fit, data_test, type = "prob")[,"Positive"]>=             thresh_prob_xgbtree_up_fit, "Positive", "Negative"))
+  real = factor(data_test$Diagnosis)
+  cm = ConfusionTableR::binary_class_cm(preds,
+                                         real,
+                                         mode = "everything",
+                                         positive = "Positive")
+  
+  sensitivity = cm$confusion_matrix$byClass[1]
+  specificity = cm$confusion_matrix$byClass[2]
+  df = data.frame(preds = preds, real = real)
+  df$preds = as.numeric(ifelse(df$preds == "Positive", 1, 0))
+  df$real = as.numeric(ifelse(df$real == "Positive", 1, 0))
+  prediction = prediction(df$preds, df$real)
+  AUC = as.numeric(performance(prediction, "auc")@y.values)
+  row = data.frame(model = "xtreme gradient boosting",
+                    seed = 1:10,
+                    probab = thresh_prob_xgbtree_up_fit,
+                    max_J_train = max_J_train,
+                    sensitivity = sensitivity,
+                    specificity = specificity,
+                    AUC = AUC)
+   df_results_xgb = rbind(df_results_xgb, row)
+```
+
+```{r}
+df_results_xgb %>% kable() %>% kable_classic()
+```
+
+
+```{r}
+write.csv(df_results_xgb, "lung_xgb.csv")
+```
+
+
+
+
+#SVM Lineal
+
+```{r}
+library(tidymodels)
+library(caret)
+library(ROCR)
+```
+
+
+```{r}
+df_results_svm = NULL
+
+
+  set.seed(1:10)
+  train_row_numbers = createDataPartition(data$Diagnosis, p = 0.8, list = FALSE)
+  d_train = data[train_row_numbers, ]
+  d_test = data[-train_row_numbers, ]
+  transformer = recipe(formula = Diagnosis ~ .,
+                       data = d_train)%>%
+  step_dummy(all_nominal_predictors())%>%
+  step_center(all_numeric())%>%
+  step_scale(all_numeric())
+  
+  data_train = transformer %>%
+  prep(d_train) %>%
+  bake(new_data = NULL)
+  data_test = transformer %>%
+  prep(d_test) %>%
+  bake(new_data = d_test)
+  ctrl = trainControl(method = "cv",
+                      number = 10,
+                      returnResamp = "final",
+                      verboseIter = FALSE,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE,
+                      savePredictions = T,
+                      allowParallel = TRUE,
+                      sampling = "up")
+  
+  tuneGrid = expand.grid(C = seq(0, 2, length = 20))
+  
+  set.seed(1:10)
+  svm_fit = train(Diagnosis ~ .,
+                         data = data_train,
+                         method = "svmLinear",
+                         metric = "ROC",
+                         trControl = ctrl,
+                         tuneGrid = tuneGrid,)
+  
+  probs = seq(0.1, 0.9, by = 0.1)
+  set.seed(1:10)
+  ths_svm_fit = thresholder(svm_fit,
+                                threshold = probs,
+                                final = TRUE,
+                                statistic = "all")
+  
+  
+  ths_svm_fit%>%
+  mutate(prob = probs)%>%
+  filter(J == max(J))%>%
+  pull(prob) -> thresh_prob_svm_fit
+  ths_svm_fit %>%
+  mutate(prob =probs) %>%
+  filter(J == max(J)) %>%
+  pull(J) -> max_J_train
+  preds = as.factor(ifelse(predict(svm_fit, data_test, type = "prob")[,"Positive"]>=thresh_prob_svm_fit, "Positive", "Negative"))
+  real = factor(data_test$Diagnosis)
+  cm = ConfusionTableR::binary_class_cm(preds,
+                                         real,
+                                         mode = "everything",
+                                         positive = "Positive")
+  
+  sensitivity = cm$confusion_matrix$byClass[1]
+  specificity = cm$confusion_matrix$byClass[2]
+  df = data.frame(preds = preds, real = real)
+  df$preds = as.numeric(ifelse(df$preds == "Positive", 1, 0))
+  df$real = as.numeric(ifelse(df$real == "Positive", 1, 0))
+  prediction = prediction(df$preds, df$real)
+  AUC = as.numeric(performance(prediction, "auc")@y.values)
+  row = data.frame(model = "SVM",
+                    seed = 1:10,
+                    probab = thresh_prob_svm_fit,
+                    max_J_train = max_J_train,
+                    sensitivity = sensitivity,
+                    specificity = specificity,
+                    AUC = AUC)
+   df_results_svm = rbind(df_results_svm, row)
+  
+```
+
+
+```{r}
+df_results_svm %>% kable() %>% kable_classic()
+```
+
+
+```{r}
+write.xlsx(df_results_svm, "lung_xgb.csv")
+```
+
+
+### Random Forest
+
+```{r}
+library(tidymodels)
+library(caret)
+library(ROCR)
+```
+
+
+
+```{r}
+df_results_rf = NULL
+
+
+  set.seed(1:10)
+  train_row_numbers = createDataPartition(data$Diagnosis, p = 0.8, list = FALSE)
+  d_train = data[train_row_numbers, ]
+  d_test = data[-train_row_numbers, ]
+  transformer = recipe(formula = Diagnosis ~ .,
+                       data = d_train)%>%
+  step_dummy(all_nominal_predictors())%>%
+  step_center(all_numeric())%>%
+  step_scale(all_numeric())
+  
+  data_train = transformer %>%
+  prep(d_train) %>%
+  bake(new_data = NULL)
+  data_test = transformer %>%
+  prep(d_test) %>%
+  bake(new_data = d_test)
+  ctrl = trainControl(method = "cv",
+                      number = 10,
+                      returnResamp = "final",
+                      verboseIter = FALSE,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE,
+                      savePredictions = T,
+                      allowParallel = TRUE,
+                      sampling = "up")
+
+  tuneGrid = expand.grid(mtry = 1:15)
+                         
+  set.seed(1:10)
+  rf_fit = train(Diagnosis ~ .,
+                         data = data_train,
+                         method = "rf",
+                         metric = "ROC",
+                         trControl = ctrl,
+                         tuneGrid = tuneGrid,)
+  
+  probs = seq(0.1, 0.9, by = 0.1)
+  set.seed(1:10)
+  ths_rf_fit = thresholder(rf_fit,
+                                threshold = probs,
+                                final = TRUE,
+                                statistic = "all")
+  
+  ths_rf_fit%>%
+  mutate(prob = probs)%>%
+  filter(J == max(J))%>%
+  pull(prob) -> thresh_prob_rf_fit
+  ths_rf_fit %>%
+  mutate(prob =probs) %>%
+  filter(J == max(J)) %>%
+  pull(J) -> max_J_train
+  preds = as.factor(ifelse(predict(rf_fit, data_test, type = "prob")[,"Positive"]>=             thresh_prob_rf_fit, "Positive", "Negative"))
+  real = factor(data_test$Diagnosis)
+  cm = ConfusionTableR::binary_class_cm(preds,
+                                         real,
+                                         mode = "everything",
+                                         positive = "Positive")
+  
+  sensitivity = cm$confusion_matrix$byClass[1]
+  specificity = cm$confusion_matrix$byClass[2]
+  df = data.frame(preds = preds, real = real)
+  df$preds = as.numeric(ifelse(df$preds == "Positive", 1, 0))
+  df$real = as.numeric(ifelse(df$real == "Positive", 1, 0))
+  prediction = prediction(df$preds, df$real)
+  AUC = as.numeric(performance(prediction, "auc")@y.values)
+  row = data.frame(model = "Ramdom Forest",
+                    seed = 1:10,
+                    probab = thresh_prob_rf_fit,
+                    max_J_train = max_J_train,
+                    sensitivity = sensitivity,
+                    specificity = specificity,
+                    AUC = AUC)
+   df_results_rf = rbind(df_results_rf, row)
+```
+
+
+```{r}
+df_results_rf %>% kable() %>% kable_classic()
+```
+
+
+```{r}
+write.xlsx(df_results_rf, "lung_xgb.csv")
+```
+
+
+## Metricas
+
+```{r}
+df_results = rbind(df_results_xgb, df_results_svm, df_results_rf)
+write.csv(df_results, "resueltados_modelos_lung_cancer.csv")
+```
+
+```{r}
+file.choose()
+```
+
+```{r}
+resultados_modelos_lung_cancer.csv = "C:\\Users\\mao\\Downloads\\resueltados_modelos_lung_cancer.csv"
+```
+
+
+```{r}
+data = read.csv("resueltados_modelos_lung_cancer.csv")
+```
+
+
+```{r}
+
+str(data)
+
+data["X"]=NULL
+data["seed"]=NULL
+data["max_J_train"]=NULL
+data["probab"]=NULL
+
+data$model = as.factor(as.character(data$model))
+
+formato = c("striped","bordered", "hover","responsive")
+
+data %>% kable() %>% kable_styling(bootstrap_options = formato,
+                                   full_width =  F,
+                                   position = "center",
+                                   font_size = 12)%>%
+  row_spec(0, bold = T, color = "black", align = "center") %>%
+  row_spec(1:nrow(data), bold = T, color = "grey", align = "center")
+
+```
+
+### Sensibilidad
+
+```{r}
+gsen =
+ggplot(data, aes(x = model, y = data$sensitivity, fill = model)) +
+geom_boxplot() +
+scale_fill_brewer(palette = 10) +
+theme_classic()
+
+ggplotly(gsen)
+
+```
+
+```{r}
+sensibilidad = tapply(data$sensitivity, data$model, median)
+
+sensibilidad = data.frame(sensibilidad)
+names(sensibilidad) = c("Sensibilidad")
+```
+
+
+
+
+### Especificidad
+
+```{r}
+gspe =
+ggplot(data, aes(x = model, y = data$specificity, fill = model)) +
+geom_boxplot() +
+scale_fill_brewer(palette = 10) +
+theme_classic()
+
+ggplotly(gspe)
+```
+
+
+```{r}
+especificidad = tapply(data$specificity, data$model, median)
+
+especificidad = data.frame(specificity)
+names(especificidad) = c("Especificidad")
+```
+
+
+
+### AUC
+
+```{r}
+gauc =
+ggplot(data, aes(x = model, y = data$AUC, fill = model)) +
+geom_boxplot() +
+scale_fill_brewer(palette = 10) +
+theme_classic()
+
+ggplotly(gauc)
+```
+
+
+```{r}
+AUC = tapply(data$AUC, data$model, median)
+
+AUC = data.frame(AUC)
+names(AUC) = c("AUC")
+```
+
+
+##Resultado Final
+```{r}
+final = cbind("sensibilidad", "specificidad", "AUC")
+
+formato = c("striped","bordered", "hover","responsive")
+
+final %>% kable() %>% kable_styling(bootstrap_options = formato,
+                                   full_width =  F,
+                                   position = "center",
+                                   font_size = 12)
+```
+
+## Comparacion de Metricas
+
+```{r}
+data_r = melt(data, id.vars = "model", measure.vars = 2:4)
+
+
+ggplot(data_r, aes(x = model, y = value)) +
+  geom_boxplot() +
+  facet_wrap(~ variable, nrow = 3, ncol = 1, scales = "free")
+```
+
+
+```{r}
+
+m=matrix(nrow = 3,
+         ncol = 1,
+         dimnames = list(colnames(data)[-1], # quita model
+                       c("p-valor")))
+
+m
+```
+
+```{r}
+for (i in 2:4) {
+  f = formula(paste(colnames(data)[i], "~ model"))
+  
+  test = med1way(f,
+                   data = data) #Comparacion basandonos en la mediana
+  
+  m[colnames(data)[i], ] = c(round(test$p.value,4))
+}
+
+```
+
+
+
+```{r}
+formato = c("striped","bordered","hover","responsive")
+
+ m %>% kable() %>% kable_styling(bootstrap_options =  formato,
+                                 full_width =  F,
+                                 position = "center",
+                                 font_size = 12)
+```
+
+
+## Explicaciones
+
+- Sensibilidad: Proporción de *individuos enfermos* que poseen un *diagnóstico (+)*
+
+Sensibilidad - VP/(VP+FN)
+
+Menos FN ------> Más Sensibilidad (importante)
+
+FN - Diagnóstico (-), pero realmente Enfermo
+
+- Especificidad: Proporción de *individuos no enfermos* que poseen un *diagnostico (-)*
+
+Especificidad - VN/(VN+FP)
+
+Menos FP ------> Más Especificidad
+
+FP - Diagnóstico (+), pero realmente No enfermo
+
+El análisis basado en las curvas ROC permite:
+
+a) Determinar él punto de corte en el que se alcanza la sensibilidad y la especificidad más alta
+b) Evaluar la capacidad de diferencion individuos sanos frente enfermos
+
+Los ejes de la curva ROC adoptan valores entre 0 y a C0% y 100%), lo que delimita un cuadrado de área tqual a 1. A medida que el AUC se acerca a 1, mayor será la capacidad de diferenciar individuos sanos frente enfermos
+
+El punto de corte que determina la Sensibilidad y Especificidad más Alto, es aquel que presenta el mayor indice de Youden. calculado según la fórmula:
+Sensibilidad + (1 - Especificidad).
+
+Graficomente, este corresponde al punto de la curva ROC mas cercano el angulo superior izquierdo del gráfico, es decir, más cercano alpunto del grafico cuya Senstellidad y Especificidad es igual a 100%.
+
+Es preciso aclarar que el indice de Youden adentifica el punto de corte que determina la Sensibilidad y Especificidad mas alta conjuntamente, es decir, un mismo punto de corte no necesoriamente determina la Sensibilidad ni la Especificidad mas alta, ya que, generalmente, La Sensibilidad mas alta esta determinado por un punto de corte. mientras que la Especificidad mas alta está determinada por otro.
+
+- El eje y del grafico de la curva ROC corresponde a la Sensibilidad: % de VP sobre et total de Enfermos
+- El eje X del grótico de la curva ROC corresponde a (1 - Especificidad): % FP sobre el total de Sanos
+
+
+
+
+
+
+
+
+
+
